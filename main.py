@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diffusers import DiffusionPipeline
@@ -10,132 +10,169 @@ import uuid
 import os
 import torch
 
+# --- API Key ---
+API_KEY = os.getenv("API_KEY", "changeme")  # You should set this securely in your env
+
 app = FastAPI()
 OUTPUT_DIR = "./outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or specify your frontend domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# --- Aspect Ratios and Duration Maps ---
+
 ASPECT_RATIOS = {
     "16:9": (1024, 576),
     "9:16": (576, 1024),
     "1:1": (768, 768),
     "4:3": (800, 600),
-    "3:4": (600, 800)
+    "3:4": (600, 800),
 }
 DURATION_TO_FRAMES = {5: 30, 10: 60, 15: 90, 20: 120}
 
-# --- MODEL PIPELINES ---
-# TEXT TO VIDEO
-t2v_pipe = DiffusionPipeline.from_pretrained("Wan-AI/Wan2.1-T2V-1.3B-Diffusers", torch_dtype=torch.float16).to("cuda")
-
-# IMAGE TO VIDEO
-i2v_pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16).to("cuda")
-
-# TEXT TO IMAGE
-t2i_pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16).to("cuda")
-
-# IMAGE TO IMAGE
-i2i_pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16).to("cuda")
-
-# TEXT TO SPEECH
+# --- Model Initialization ---
+t2v_pipe = DiffusionPipeline.from_pretrained(
+    "Wan-AI/Wan2.1-T2V-1.3B-Diffusers", torch_dtype=torch.float16
+).to("cuda")
+i2v_pipe = DiffusionPipeline.from_pretrained(
+    "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16
+).to("cuda")
+t2i_pipe = DiffusionPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
+).to("cuda")
+i2i_pipe = DiffusionPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16
+).to("cuda")
 tts_pipe = hf_pipeline("text-to-speech", model="stabilityai/stable-audio-open-1.0")
 
-# --- ENDPOINTS ---
+jobs = {}
 
-# 1. TEXT TO VIDEO
-@app.post("/text-to-video")
-async def text_to_video(
-    prompt: str = Form(...),
-    video_style: str = Form(...),
-    aspect_ratio: str = Form("16:9"),
-    duration: int = Form(5)
-):
-    styled_prompt = f"{prompt}, {video_style}"
-    width, height = ASPECT_RATIOS.get(aspect_ratio, (512, 512))
-    frames = DURATION_TO_FRAMES.get(duration, 30)
-    video_frames = t2v_pipe(prompt=styled_prompt, width=width, height=height, num_frames=frames).frames[0]
-    video_array = [np.array(f) for f in video_frames]
-    filename = f"t2v-{uuid.uuid4()}.mp4"
-    video_path = os.path.join(OUTPUT_DIR, filename)
-    imageio.mimsave(video_path, video_array, fps=6)
-    return FileResponse(video_path, media_type="video/mp4", filename=filename)
-
-
-# 2. IMAGE TO VIDEO
-@app.post("/image-to-video")
-async def image_to_video(
-    file: UploadFile = File(...),
-    prompt: str = Form(...),
-    video_style: str = Form(...),
-    aspect_ratio: str = Form("16:9"),
-    duration: int = Form(5)
-):
-    styled_prompt = f"{prompt}, {video_style}"
-    image = Image.open(await file.read()).convert("RGB")
-    image = image.resize(ASPECT_RATIOS.get(aspect_ratio, (512, 512)))
-    frames = DURATION_TO_FRAMES.get(duration, 30)
-    video_frames = i2v_pipe(image, prompt=styled_prompt, num_frames=frames).frames[0]
-    video_array = [np.array(f) for f in video_frames]
-    filename = f"i2v-{uuid.uuid4()}.mp4"
-    video_path = os.path.join(OUTPUT_DIR, filename)
-    imageio.mimsave(video_path, video_array, fps=6)
-    return FileResponse(video_path, media_type="video/mp4", filename=filename)
-
-
-# 3. TEXT TO SPEECH
-@app.post("/text-to-speech")
-async def text_to_speech(
-    prompt: str = Form(...),
-    voice: str = Form("default")
-):
-    audio = tts_pipe(prompt)
-    filename = f"tts-{uuid.uuid4()}.wav"
-    audio_path = os.path.join(OUTPUT_DIR, filename)
-    with open(audio_path, "wb") as f:
-        f.write(audio["audio"])
-    return FileResponse(audio_path, media_type="audio/wav", filename=filename)
-
-
-# 4. TEXT TO IMAGE
-@app.post("/text-to-image")
-async def text_to_image(
-    prompt: str = Form(...),
-    style: str = Form("realistic"),
-    aspect_ratio: str = Form("1:1")
-):
-    styled_prompt = f"{prompt}, {style}"
-    width, height = ASPECT_RATIOS.get(aspect_ratio, (512, 512))
-    image = t2i_pipe(prompt=styled_prompt, width=width, height=height).images[0]
-    filename = f"t2i-{uuid.uuid4()}.png"
-    image_path = os.path.join(OUTPUT_DIR, filename)
-    image.save(image_path)
-    return FileResponse(image_path, media_type="image/png", filename=filename)
-
-
-# 5. IMAGE TO IMAGE
-@app.post("/image-to-image")
-async def image_to_image(
-    file: UploadFile = File(...),
-    prompt: str = Form(...),
+@app.post("/run")
+async def run(
+    task_type: str = Form(...),
+    prompt: str = Form(None),
+    style: str = Form(None),
+    file: UploadFile = File(None),
+    video_style: str = Form(None),
+    aspect_ratio: str = Form("1:1"),
+    duration: int = Form(5),
     transform_strength: str = Form("medium"),
-    style: str = Form("artistic"),
-    aspect_ratio: str = Form("1:1")
+    x_api_key: str = Header(None),
 ):
-    styled_prompt = f"{prompt}, {style}"
-    image = Image.open(await file.read()).convert("RGB")
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     width, height = ASPECT_RATIOS.get(aspect_ratio, (512, 512))
-    strength_map = {"low": 0.3, "medium": 0.5, "high": 0.7, "maximum": 0.9}
-    strength = strength_map.get(transform_strength.lower(), 0.5)
-    image = image.resize((width, height))
-    output = i2i_pipe(prompt=styled_prompt, image=image, strength=strength).images[0]
-    filename = f"i2i-{uuid.uuid4()}.png"
-    image_path = os.path.join(OUTPUT_DIR, filename)
-    output.save(image_path)
-    return FileResponse(image_path, media_type="image/png", filename=filename)
+    frames = DURATION_TO_FRAMES.get(duration, 30)
+    uid = str(uuid.uuid4())
+
+    if task_type == "text_to_image":
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt is required")
+        styled_prompt = f"{prompt}, {style or 'realistic'}"
+        image = t2i_pipe(prompt=styled_prompt, width=width, height=height).images[0]
+        filename = f"t2i-{uid}.png"
+        path = os.path.join(OUTPUT_DIR, filename)
+        image.save(path)
+        return {"output": {"image_url": f"/outputs/{filename}"}}
+
+    elif task_type == "image_to_image":
+        if not file or not prompt:
+            raise HTTPException(status_code=400, detail="file and prompt are required")
+        styled_prompt = f"{prompt}, {style or 'artistic'}"
+        image = Image.open(await file.read()).convert("RGB")
+        strength_map = {"low": 0.3, "medium": 0.5, "high": 0.7, "maximum": 0.9}
+        strength = strength_map.get(transform_strength.lower(), 0.5)
+        image = image.resize((width, height))
+        output = i2i_pipe(prompt=styled_prompt, image=image, strength=strength).images[0]
+        filename = f"i2i-{uid}.png"
+        path = os.path.join(OUTPUT_DIR, filename)
+        output.save(path)
+        return {"output": {"image_url": f"/outputs/{filename}"}}
+
+    elif task_type == "text_to_video":
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt is required")
+        styled_prompt = f"{prompt}, {video_style or 'realistic'}"
+        job_id = uid
+        jobs[job_id] = {"status": "IN_QUEUE", "video_url": None}
+
+        import asyncio
+        async def generate_video():
+            jobs[job_id]["status"] = "IN_PROGRESS"
+            video_frames = t2v_pipe(prompt=styled_prompt, width=width, height=height, num_frames=frames).frames[0]
+            video_array = [np.array(f) for f in video_frames]
+            filename = f"t2v-{job_id}.mp4"
+            path = os.path.join(OUTPUT_DIR, filename)
+            imageio.mimsave(path, video_array, fps=6)
+            jobs[job_id]["status"] = "COMPLETED"
+            jobs[job_id]["video_url"] = f"/outputs/{filename}"
+
+        asyncio.create_task(generate_video())
+        return {"id": job_id, "status": "IN_QUEUE"}
+
+    elif task_type == "image_to_video":
+        if not file or not prompt:
+            raise HTTPException(status_code=400, detail="file and prompt are required")
+        styled_prompt = f"{prompt}, {video_style or 'realistic'}"
+        job_id = uid
+        jobs[job_id] = {"status": "IN_QUEUE", "video_url": None}
+
+        import asyncio
+        async def generate_video():
+            jobs[job_id]["status"] = "IN_PROGRESS"
+            image = Image.open(await file.read()).convert("RGB")
+            image = image.resize((width, height))
+            video_frames = i2v_pipe(image, prompt=styled_prompt, num_frames=frames).frames[0]
+            video_array = [np.array(f) for f in video_frames]
+            filename = f"i2v-{job_id}.mp4"
+            path = os.path.join(OUTPUT_DIR, filename)
+            imageio.mimsave(path, video_array, fps=6)
+            jobs[job_id]["status"] = "COMPLETED"
+            jobs[job_id]["video_url"] = f"/outputs/{filename}"
+
+        asyncio.create_task(generate_video())
+        return {"id": job_id, "status": "IN_QUEUE"}
+
+    elif task_type == "text_to_speech":
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt is required")
+        audio = tts_pipe(prompt)
+        filename = f"tts-{uid}.wav"
+        path = os.path.join(OUTPUT_DIR, filename)
+        with open(path, "wb") as f:
+            f.write(audio["audio"])
+        return {"output": {"audio_url": f"/outputs/{filename}"}}
+
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported task_type")
+
+@app.get("/status/{job_id}")
+async def status(job_id: str, x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    response = {"id": job_id, "status": job["status"]}
+    if job["status"] == "COMPLETED":
+        response["output"] = {"video_url": job["video_url"]}
+    return response
+
+@app.get("/outputs/{filename}")
+async def outputs(filename: str):
+    file_path = os.path.join(OUTPUT_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    media_type = "application/octet-stream"
+    if filename.endswith(".mp4"):
+        media_type = "video/mp4"
+    elif filename.endswith(".png"):
+        media_type = "image/png"
+    elif filename.endswith(".wav"):
+        media_type = "audio/wav"
+    return FileResponse(file_path, media_type=media_type, filename=filename)
