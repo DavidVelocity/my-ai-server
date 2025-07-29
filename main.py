@@ -4,14 +4,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from diffusers import DiffusionPipeline
 from transformers import pipeline as hf_pipeline
 from PIL import Image
+from io import BytesIO
 import numpy as np
 import imageio
 import uuid
 import os
 import torch
+import asyncio
 
 # --- API Key ---
-API_KEY = os.getenv("API_KEY", "changeme")  # You should set this securely in your env
+API_KEY = os.getenv("API_KEY", "changeme")  # Set this securely in your env
 
 app = FastAPI()
 OUTPUT_DIR = "./outputs"
@@ -19,7 +21,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://dancing-meerkat-6f06fa.netlify.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,20 +36,37 @@ ASPECT_RATIOS = {
 }
 DURATION_TO_FRAMES = {5: 30, 10: 60, 15: 90, 20: 120}
 
-# --- Model Initialization ---
-t2v_pipe = DiffusionPipeline.from_pretrained(
-    "Wan-AI/Wan2.1-T2V-1.3B-Diffusers", torch_dtype=torch.float16
-).to("cuda")
-i2v_pipe = DiffusionPipeline.from_pretrained(
-    "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16
-).to("cuda")
-t2i_pipe = DiffusionPipeline.from_pretrained(
-    "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
-).to("cuda")
-i2i_pipe = DiffusionPipeline.from_pretrained(
-    "stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16
-).to("cuda")
-tts_pipe = hf_pipeline("text-to-speech", model="stabilityai/stable-audio-open-1.0")
+# --- Model placeholders ---
+t2v_pipe = None
+i2v_pipe = None
+t2i_pipe = None
+i2i_pipe = None
+tts_pipe = None
+
+@app.on_event("startup")
+async def load_models():
+    global t2v_pipe, i2v_pipe, t2i_pipe, i2i_pipe, tts_pipe
+    print("Loading models...")
+
+    t2v_pipe = DiffusionPipeline.from_pretrained(
+        "Wan-AI/Wan2.1-T2V-1.3B-Diffusers", torch_dtype=torch.float16
+    ).to("cuda")
+
+    i2v_pipe = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16
+    ).to("cuda")
+
+    t2i_pipe = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
+    ).to("cuda")
+
+    i2i_pipe = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16
+    ).to("cuda")
+
+    tts_pipe = hf_pipeline("text-to-speech", model="stabilityai/stable-audio-open-1.0")
+
+    print("✅ All models loaded successfully.")
 
 jobs = {}
 
@@ -84,7 +103,8 @@ async def run(
         if not file or not prompt:
             raise HTTPException(status_code=400, detail="file and prompt are required")
         styled_prompt = f"{prompt}, {style or 'artistic'}"
-        image = Image.open(await file.read()).convert("RGB")
+        image_data = await file.read()
+        image = Image.open(BytesIO(image_data)).convert("RGB")
         strength_map = {"low": 0.3, "medium": 0.5, "high": 0.7, "maximum": 0.9}
         strength = strength_map.get(transform_strength.lower(), 0.5)
         image = image.resize((width, height))
@@ -101,7 +121,6 @@ async def run(
         job_id = uid
         jobs[job_id] = {"status": "IN_QUEUE", "video_url": None}
 
-        import asyncio
         async def generate_video():
             jobs[job_id]["status"] = "IN_PROGRESS"
             video_frames = t2v_pipe(prompt=styled_prompt, width=width, height=height, num_frames=frames).frames[0]
@@ -122,10 +141,10 @@ async def run(
         job_id = uid
         jobs[job_id] = {"status": "IN_QUEUE", "video_url": None}
 
-        import asyncio
         async def generate_video():
             jobs[job_id]["status"] = "IN_PROGRESS"
-            image = Image.open(await file.read()).convert("RGB")
+            image_data = await file.read()
+            image = Image.open(BytesIO(image_data)).convert("RGB")
             image = image.resize((width, height))
             video_frames = i2v_pipe(image, prompt=styled_prompt, num_frames=frames).frames[0]
             video_array = [np.array(f) for f in video_frames]
