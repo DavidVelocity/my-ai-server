@@ -7,12 +7,14 @@ RUN apt update && apt install -y python3 python3-pip git
 COPY . /app
 WORKDIR /app
 
-# 3. Install dependencies
-RUN pip3 install --upgrade pip 
+# 3. Pin pip below 25.3 to avoid legacy build failures
+RUN pip3 install "pip<25.3"
+
+# 4. Install dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 4. Install xformers last (cleanest way)
+# 5. Install xformers last (cleanest way)
 RUN pip install xformers==0.0.25 --index-url https://download.pytorch.org/whl/cu118
 
-# 5. Launch FastAPI on RunPod-compatible port
+# 6. Launch FastAPI on RunPod-compatible port
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
