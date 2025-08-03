@@ -12,12 +12,12 @@ import os
 import torch
 import asyncio
 
-# --- API Key ---
-API_KEY = os.getenv("API_KEY", "changeme")  # Set this securely in your env
-
-app = FastAPI()
+API_KEY = os.getenv("API_KEY", "changeme")  # Set securely in your environment
+MODEL_DIR = "./models"
 OUTPUT_DIR = "./outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,7 +36,7 @@ ASPECT_RATIOS = {
 }
 DURATION_TO_FRAMES = {5: 30, 10: 60, 15: 90, 20: 120}
 
-# --- Model placeholders ---
+# Model placeholders
 t2v_pipe = None
 i2v_pipe = None
 t2i_pipe = None
@@ -46,25 +46,25 @@ tts_pipe = None
 @app.on_event("startup")
 async def load_models():
     global t2v_pipe, i2v_pipe, t2i_pipe, i2i_pipe, tts_pipe
-    print("Loading models...")
+    print("Loading models from local disk...")
 
     t2v_pipe = DiffusionPipeline.from_pretrained(
-        "Wan-AI/Wan2.1-T2V-1.3B-Diffusers", torch_dtype=torch.float16
+        os.path.join(MODEL_DIR, "t2v"), torch_dtype=torch.float16
     ).to("cuda")
 
     i2v_pipe = DiffusionPipeline.from_pretrained(
-        "stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16
+        os.path.join(MODEL_DIR, "i2v"), torch_dtype=torch.float16
     ).to("cuda")
 
     t2i_pipe = DiffusionPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
+        os.path.join(MODEL_DIR, "t2i"), torch_dtype=torch.float16
     ).to("cuda")
 
     i2i_pipe = DiffusionPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-xl-refiner-1.0", torch_dtype=torch.float16
+        os.path.join(MODEL_DIR, "i2i"), torch_dtype=torch.float16
     ).to("cuda")
 
-    tts_pipe = hf_pipeline("text-to-speech", model="stabilityai/stable-audio-open-1.0")
+    tts_pipe = hf_pipeline("text-to-speech", model=os.path.join(MODEL_DIR, "tts"))
 
     print("✅ All models loaded successfully.")
 
