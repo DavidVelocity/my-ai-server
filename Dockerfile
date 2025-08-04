@@ -16,6 +16,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # 5. Install xformers last (cleanest way)
 RUN pip install xformers==0.0.25 --index-url https://download.pytorch.org/whl/cu118
 
+# **Add your Hugging Face token here**
+ENV HUGGINGFACE_TOKEN=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
+
 # 6. Download models once during image build
 RUN python3 download_models.py
 
