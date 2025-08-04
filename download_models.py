@@ -13,7 +13,7 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
         if is_pipeline:
             DiffusionPipeline.from_pretrained(
                 name,
-                use_auth_token=HF_TOKEN,  # <-- This line authenticates
+                use_auth_token=HF_TOKEN,  # <-- Authenticate with Hugging Face token
                 **kwargs
             ).save_pretrained(path)
         else:
@@ -25,6 +25,7 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 
 download_model("Wan-AI/Wan2.1-T2V-1.3B-Diffusers", subfolder="t2v", torch_dtype=torch.float16)
 download_model("stabilityai/stable-video-diffusion-img2vid-xt", subfolder="i2v", torch_dtype=torch.float16)
-download_model("stabilityai/stable-diffusion-xl-base-1.0", subfolder="t2i", torch_dtype=torch.float16)
+download_model("stabilityai/stable-diffusion-xl-base-1.0", subfolder="t2i/base", torch_dtype=torch.float16)
+download_model("stabilityai/stable-diffusion-xl-refiner-1.0", subfolder="t2i/refiner", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-refiner-1.0", subfolder="i2i", torch_dtype=torch.float16)
 download_model("stabilityai/stable-audio-open-1.0", subfolder="tts", is_pipeline=False)

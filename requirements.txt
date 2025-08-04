@@ -44,3 +44,4 @@ zipp==3.23.0
 audiocraft==1.0.0
 imageio==2.34.1
 librosa==0.10.2.post1
+invisible-watermark==0.1.5

@@ -1,7 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from diffusers import DiffusionPipeline
+from diffusers import (
+    DiffusionPipeline,
+    WanPipeline,
+    AutoencoderKLWan,
+    StableDiffusionXLImg2ImgPipeline,
+    StableAudioPipeline,
+)
+from diffusers.utils import load_image, export_to_video
 from transformers import pipeline as hf_pipeline
 from PIL import Image
 from io import BytesIO
@@ -37,34 +44,64 @@ ASPECT_RATIOS = {
 DURATION_TO_FRAMES = {5: 30, 10: 60, 15: 90, 20: 120}
 
 # Model placeholders
-t2v_pipe = None
-i2v_pipe = None
-t2i_pipe = None
-i2i_pipe = None
-tts_pipe = None
+t2v_pipe = None  # Wan text-to-video pipeline
+i2v_pipe = None  # StabilityAI image-to-video pipeline
+t2i_base = None  # StabilityAI text-to-image base pipeline
+t2i_refiner = None  # StabilityAI text-to-image refiner pipeline
+i2i_pipe = None  # StabilityAI image-to-image pipeline
+tts_pipe = None  # StabilityAI text-to-speech pipeline
 
 @app.on_event("startup")
 async def load_models():
-    global t2v_pipe, i2v_pipe, t2i_pipe, i2i_pipe, tts_pipe
+    global t2v_pipe, i2v_pipe, t2i_base, t2i_refiner, i2i_pipe, tts_pipe
     print("Loading models from local disk...")
 
-    t2v_pipe = DiffusionPipeline.from_pretrained(
-        os.path.join(MODEL_DIR, "t2v"), torch_dtype=torch.float16
+    # Wan text-to-video
+    vae = AutoencoderKLWan.from_pretrained(
+        os.path.join(MODEL_DIR, "t2v", "vae"), torch_dtype=torch.float32
+    )
+    t2v_pipe = WanPipeline.from_pretrained(
+        os.path.join(MODEL_DIR, "t2v"), vae=vae, torch_dtype=torch.bfloat16
     ).to("cuda")
 
+    # StabilityAI image-to-video
     i2v_pipe = DiffusionPipeline.from_pretrained(
         os.path.join(MODEL_DIR, "i2v"), torch_dtype=torch.float16
     ).to("cuda")
 
-    t2i_pipe = DiffusionPipeline.from_pretrained(
-        os.path.join(MODEL_DIR, "t2i"), torch_dtype=torch.float16
-    ).to("cuda")
+    # StabilityAI text-to-image base and refiner
+    t2i_base = DiffusionPipeline.from_pretrained(
+        os.path.join(MODEL_DIR, "t2i", "base"),
+        torch_dtype=torch.float16,
+        variant="fp16",
+        use_safetensors=True,
+    )
+    t2i_base.to("cuda")
 
-    i2i_pipe = DiffusionPipeline.from_pretrained(
-        os.path.join(MODEL_DIR, "i2i"), torch_dtype=torch.float16
-    ).to("cuda")
+    t2i_refiner = DiffusionPipeline.from_pretrained(
+        os.path.join(MODEL_DIR, "t2i", "refiner"),
+        text_encoder_2=t2i_base.text_encoder_2,
+        vae=t2i_base.vae,
+        torch_dtype=torch.float16,
+        use_safetensors=True,
+        variant="fp16",
+    )
+    t2i_refiner.to("cuda")
 
-    tts_pipe = hf_pipeline("text-to-speech", model=os.path.join(MODEL_DIR, "tts"))
+    # StabilityAI image-to-image pipeline
+    i2i_pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
+        os.path.join(MODEL_DIR, "i2i"),
+        torch_dtype=torch.float16,
+        variant="fp16",
+        use_safetensors=True,
+    )
+    i2i_pipe.to("cuda")
+
+    # StabilityAI text-to-speech pipeline
+    tts_pipe = StableAudioPipeline.from_pretrained(
+        os.path.join(MODEL_DIR, "tts"), torch_dtype=torch.float16
+    )
+    tts_pipe.to("cuda")
 
     print("✅ All models loaded successfully.")
 
@@ -93,7 +130,21 @@ async def run(
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
         styled_prompt = f"{prompt}, {style or 'realistic'}"
-        image = t2i_pipe(prompt=styled_prompt, width=width, height=height).images[0]
+        # Run base and refiner pipelines in sequence
+        image_latent = t2i_base(
+            prompt=styled_prompt,
+            num_inference_steps=40,
+            denoising_end=0.8,
+            output_type="latent",
+            height=height,
+            width=width,
+        ).images
+        image = t2i_refiner(
+            prompt=styled_prompt,
+            num_inference_steps=40,
+            denoising_start=0.8,
+            image=image_latent,
+        ).images[0]
         filename = f"t2i-{uid}.png"
         path = os.path.join(OUTPUT_DIR, filename)
         image.save(path)
@@ -123,11 +174,18 @@ async def run(
 
         async def generate_video():
             jobs[job_id]["status"] = "IN_PROGRESS"
-            video_frames = t2v_pipe(prompt=styled_prompt, width=width, height=height, num_frames=frames).frames[0]
+            video_frames = t2v_pipe(
+                prompt=styled_prompt,
+                negative_prompt="",  # you can add negative_prompt if you want
+                height=height,
+                width=width,
+                num_frames=frames,
+                guidance_scale=5.0,
+            ).frames[0]
             video_array = [np.array(f) for f in video_frames]
             filename = f"t2v-{job_id}.mp4"
             path = os.path.join(OUTPUT_DIR, filename)
-            imageio.mimsave(path, video_array, fps=6)
+            imageio.mimsave(path, video_array, fps=15)
             jobs[job_id]["status"] = "COMPLETED"
             jobs[job_id]["video_url"] = f"/outputs/{filename}"
 
@@ -146,11 +204,10 @@ async def run(
             image_data = await file.read()
             image = Image.open(BytesIO(image_data)).convert("RGB")
             image = image.resize((width, height))
-            video_frames = i2v_pipe(image, prompt=styled_prompt, num_frames=frames).frames[0]
-            video_array = [np.array(f) for f in video_frames]
+            video_frames = i2v_pipe(image=image, prompt=styled_prompt).frames[0]
             filename = f"i2v-{job_id}.mp4"
             path = os.path.join(OUTPUT_DIR, filename)
-            imageio.mimsave(path, video_array, fps=6)
+            export_to_video(video_frames, path, fps=15)
             jobs[job_id]["status"] = "COMPLETED"
             jobs[job_id]["video_url"] = f"/outputs/{filename}"
 
@@ -160,11 +217,21 @@ async def run(
     elif task_type == "text_to_speech":
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
-        audio = tts_pipe(prompt)
+        negative_prompt = "Low quality."  # optional, can be parameterized
+        generator = torch.Generator("cuda").manual_seed(0)
+        audio = tts_pipe(
+            prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=200,
+            audio_end_in_s=10.0,
+            num_waveforms_per_prompt=3,
+            generator=generator,
+        ).audios
+        output = audio[0].T.float().cpu().numpy()
         filename = f"tts-{uid}.wav"
         path = os.path.join(OUTPUT_DIR, filename)
-        with open(path, "wb") as f:
-            f.write(audio["audio"])
+        import soundfile as sf
+        sf.write(path, output, tts_pipe.vae.sampling_rate)
         return {"output": {"audio_url": f"/outputs/{filename}"}}
 
     else:
