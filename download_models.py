@@ -17,16 +17,14 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
                 **kwargs
             ).save_pretrained(path)
         else:
-            # Explicitly download tokenizer first to avoid errors
-            tokenizer = AutoTokenizer.from_pretrained(name, use_auth_token=HF_TOKEN)
-            tts_pipeline = pipeline(
+            # Download tokenizer and model into cache dir only (skip saving tokenizer manually)
+            pipeline(
                 "text-to-speech",
                 model=name,
-                tokenizer=tokenizer,
+                tokenizer=name,
                 use_auth_token=HF_TOKEN,
                 cache_dir=path,
             )
-            tts_pipeline.save_pretrained(path)
     else:
         print(f"Model {name} already downloaded.")
 
