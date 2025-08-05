@@ -1,0 +1,52 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+env/
+*.egg-info/
+*.egg
+
+# Git
+.git/
+.gitignore
+
+# Environment and config files
+*.env
+*.env.* 
+.envrc
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+env/
+*.egg-info/
+*.egg
+
+# Git
+.git/
+.gitignore
+
+# Environment and config files
+*.env
+*.env.* 
+.envrc
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs, temp files
+*.log
+*.tmp
+*.bak
+
+# Notebooks or large dev files (optional)
+*.ipynb
+
+
