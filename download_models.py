@@ -18,7 +18,7 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
             ).save_pretrained(path)
         else:
             # Explicitly download tokenizer first to avoid errors
-            tokenizer = AutoTokenizer.from_pretrained(name, use_auth_token=HF_TOKEN, cache_dir=path)
+            tokenizer = AutoTokenizer.from_pretrained(name, use_auth_token=HF_TOKEN)
             tts_pipeline = pipeline(
                 "text-to-speech",
                 model=name,
