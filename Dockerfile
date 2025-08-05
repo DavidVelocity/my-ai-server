@@ -19,11 +19,12 @@ RUN pip3 install --no-cache-dir --upgrade diffusers
 # 6. Install xformers last (cleanest way)
 RUN pip install xformers==0.0.25 --index-url https://download.pytorch.org/whl/cu118
 
-# **Add your Hugging Face token here**
-ENV HUGGINGFACE_TOKEN=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
+# 7. Pass Hugging Face token securely at build time
+ARG HUGGINGFACE_TOKEN
+ENV HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
 
-# 7. Download models once during image build
+# 8. Download models once during image build
 RUN python3 download_models.py
 
-# 8. Run FastAPI app on RunPod port
+# 9. Run FastAPI app on RunPod port
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]

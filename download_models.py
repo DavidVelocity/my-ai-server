@@ -1,5 +1,5 @@
 from diffusers import DiffusionPipeline
-from transformers import pipeline, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForSpeechSeq2Seq
 import torch
 import os
 
@@ -17,13 +17,17 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
                 **kwargs
             ).save_pretrained(path)
         else:
-            # Download tokenizer and model into cache dir only (skip saving tokenizer manually)
-            pipeline(
-                "text-to-speech",
-                model=name,
-                tokenizer=name,
+            # For text-to-speech: download tokenizer and model explicitly
+            AutoTokenizer.from_pretrained(
+                name,
                 use_auth_token=HF_TOKEN,
-                cache_dir=path,
+                use_fast=False,
+                cache_dir=path
+            )
+            AutoModelForSpeechSeq2Seq.from_pretrained(
+                name,
+                use_auth_token=HF_TOKEN,
+                cache_dir=path
             )
     else:
         print(f"Model {name} already downloaded.")
