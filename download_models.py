@@ -1,10 +1,10 @@
 from diffusers import DiffusionPipeline
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer
 import torch
 import os
 
 MODEL_DIR = "./models"
-HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")  # <-- Pulls token from environment
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")  # Pulls token from environment
 
 def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
     path = os.path.join(MODEL_DIR, subfolder if subfolder else name)
@@ -13,11 +13,20 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
         if is_pipeline:
             DiffusionPipeline.from_pretrained(
                 name,
-                use_auth_token=HF_TOKEN,  # <-- Authenticate with Hugging Face token
+                use_auth_token=HF_TOKEN,
                 **kwargs
             ).save_pretrained(path)
         else:
-            pipeline("text-to-speech", model=name, use_auth_token=HF_TOKEN).save_pretrained(path)
+            # Explicitly download tokenizer first to avoid errors
+            tokenizer = AutoTokenizer.from_pretrained(name, use_auth_token=HF_TOKEN, cache_dir=path)
+            tts_pipeline = pipeline(
+                "text-to-speech",
+                model=name,
+                tokenizer=tokenizer,
+                use_auth_token=HF_TOKEN,
+                cache_dir=path,
+            )
+            tts_pipeline.save_pretrained(path)
     else:
         print(f"Model {name} already downloaded.")
 
