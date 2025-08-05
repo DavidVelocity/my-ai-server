@@ -11,7 +11,8 @@ WORKDIR /app
 RUN pip3 install "pip<25.3"
 
 # 4. Install dependencies from requirements.txt
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --upgrade pip setuptools && \
+    pip3 install --no-cache-dir -r requirements.txt
 
 # 5. Upgrade diffusers to latest version to avoid import errors
 RUN pip3 install --no-cache-dir --upgrade diffusers
