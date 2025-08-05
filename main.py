@@ -58,7 +58,7 @@ async def load_models():
 
     # Wan text-to-video
     vae = AutoencoderKLWan.from_pretrained(
-        os.path.join(MODEL_DIR, "t2v", "vae"), torch_dtype=torch.float32
+        os.path.join(MODEL_DIR, "t2v", "vae"), torch_dtype=torch.bfloat16
     )
     t2v_pipe = WanPipeline.from_pretrained(
         os.path.join(MODEL_DIR, "t2v"), vae=vae, torch_dtype=torch.bfloat16
@@ -130,7 +130,6 @@ async def run(
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
         styled_prompt = f"{prompt}, {style or 'realistic'}"
-        # Run base and refiner pipelines in sequence
         image_latent = t2i_base(
             prompt=styled_prompt,
             num_inference_steps=40,
@@ -176,7 +175,7 @@ async def run(
             jobs[job_id]["status"] = "IN_PROGRESS"
             video_frames = t2v_pipe(
                 prompt=styled_prompt,
-                negative_prompt="",  # you can add negative_prompt if you want
+                negative_prompt="",
                 height=height,
                 width=width,
                 num_frames=frames,
