@@ -1,7 +1,7 @@
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
-# 1. Install basic packages
-RUN apt update && apt install -y python3 python3-pip git
+# 1. Install basic packages + libGL dependency for image/video libs
+RUN apt update && apt install -y python3 python3-pip git libgl1
 
 # 2. Copy app files
 COPY . /app
