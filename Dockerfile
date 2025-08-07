@@ -18,7 +18,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 RUN pip3 install --no-cache-dir --upgrade diffusers transformers tokenizers
 
 # Install xformers last
-RUN pip3 install xformers
+RUN pip install xformers --extra-index-url https://download.pytorch.org/whl/cu118
 
 ARG HUGGINGFACE_TOKEN
 ENV HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
