@@ -21,8 +21,8 @@ jobs:
           password: ${{ secrets.CR_PAT }}
 
       - name: Build Docker image
-        run: docker build -t ghcr.io/${{ DavidVelocity }}/my-ai-server:latest .
+        run: docker build -t ghcr.io/DavidVelocity/my-ai-server:latest .
 
       - name: Push Docker image
-        run: docker push ghcr.io/${{ DavidVelocity }}/my-ai-server:latest
+        run: docker push ghcr.io/DavidVelocity/my-ai-server:latest
 
