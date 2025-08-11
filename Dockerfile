@@ -12,8 +12,8 @@ RUN pip3 install "pip<25.3"
 
 
 # Install torch and torchaudio first (matching CUDA version)
-RUN pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
-
+RUN pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 \
+    --extra-index-url https://download.pytorch.org/whl/cu118
 
 # Install all other dependencies except torch and torchaudio
 RUN pip3 install --upgrade pip setuptools
@@ -25,8 +25,8 @@ RUN pip3 install --no-cache-dir --upgrade diffusers transformers tokenizers
 
 
 # Install xformers last
-RUN pip install xformers --extra-index-url https://download.pytorch.org/whl/cu118
-
+RUN pip install xformers==0.0.23.post1 \
+    --extra-index-url https://download.pytorch.org/whl/cu118
 
 ARG HUGGINGFACE_TOKEN
 ENV HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
