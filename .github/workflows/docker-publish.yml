@@ -25,4 +25,3 @@ jobs:
 
       - name: Push Docker image
         run: docker push ghcr.io/davidvelocity/my-ai-server:latest
-
