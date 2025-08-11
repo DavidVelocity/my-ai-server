@@ -6,7 +6,6 @@ from diffusers import (
     WanPipeline,
     AutoencoderKLWan,
     StableDiffusionXLImg2ImgPipeline,
-    StableAudioPipeline,
 )
 from diffusers.utils import load_image, export_to_video
 from transformers import pipeline as hf_pipeline
@@ -18,6 +17,10 @@ import uuid
 import os
 import torch
 import asyncio
+
+# Added Coqui XTTS imports
+from TTS.tts.configs.xtts_config import XttsConfig
+from TTS.tts.models.xtts import Xtts
 
 API_KEY = os.getenv("API_KEY", "changeme")  # Set securely in your environment
 MODEL_DIR = "./models"
@@ -49,11 +52,12 @@ i2v_pipe = None  # StabilityAI image-to-video pipeline
 t2i_base = None  # StabilityAI text-to-image base pipeline
 t2i_refiner = None  # StabilityAI text-to-image refiner pipeline
 i2i_pipe = None  # StabilityAI image-to-image pipeline
-tts_pipe = None  # StabilityAI text-to-speech pipeline
+tts_model = None  # Coqui XTTS text-to-speech pipeline
+tts_config = None  # Coqui XTTS text-to-speech pipeline
 
 @app.on_event("startup")
 async def load_models():
-    global t2v_pipe, i2v_pipe, t2i_base, t2i_refiner, i2i_pipe, tts_pipe
+    global t2v_pipe, i2v_pipe, t2i_base, t2i_refiner, i2i_pipe, tts_model, tts_config
     print("Loading models from local disk...")
 
     # Wan text-to-video
@@ -97,11 +101,12 @@ async def load_models():
     )
     i2i_pipe.to("cuda")
 
-    # StabilityAI text-to-speech pipeline
-    tts_pipe = StableAudioPipeline.from_pretrained(
-        os.path.join(MODEL_DIR, "tts"), torch_dtype=torch.float16
-    )
-    tts_pipe.to("cuda")
+    # Load Coqui XTTS instead of StableAudioPipeline
+    tts_config = XttsConfig()
+    tts_config.load_json(os.path.join(MODEL_DIR, "xtts", "config.json"))
+    tts_model = Xtts.init_from_config(tts_config)
+    tts_model.load_checkpoint(tts_config, checkpoint_dir=os.path.join(MODEL_DIR, "xtts"), eval=True)
+    tts_model.cuda()
 
     print("✅ All models loaded successfully.")
 
@@ -216,21 +221,18 @@ async def run(
     elif task_type == "text_to_speech":
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
-        negative_prompt = "Low quality."  # optional, can be parameterized
-        generator = torch.Generator("cuda").manual_seed(0)
-        audio = tts_pipe(
+        # Use Coqui XTTS synthesize method
+        outputs = tts_model.synthesize(
             prompt,
-            negative_prompt=negative_prompt,
-            num_inference_steps=200,
-            audio_end_in_s=10.0,
-            num_waveforms_per_prompt=3,
-            generator=generator,
-        ).audios
-        output = audio[0].T.float().cpu().numpy()
+            tts_config,
+            speaker_wav="/data/TTS-public/_refclips/3.wav",
+            gpt_cond_len=3,
+            language="en",
+        )
+        import soundfile as sf
         filename = f"tts-{uid}.wav"
         path = os.path.join(OUTPUT_DIR, filename)
-        import soundfile as sf
-        sf.write(path, output, tts_pipe.vae.sampling_rate)
+        sf.write(path, outputs, samplerate=tts_config.audio.sample_rate)
         return {"output": {"audio_url": f"/outputs/{filename}"}}
 
     else:
