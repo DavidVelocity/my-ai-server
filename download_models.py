@@ -13,20 +13,20 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
         if is_pipeline:
             DiffusionPipeline.from_pretrained(
                 name,
-                use_auth_token=HF_TOKEN,
+                token=HF_TOKEN,       # <-- updated here
                 **kwargs
             ).save_pretrained(path)
         else:
             # For text-to-speech: download tokenizer and model explicitly
             AutoTokenizer.from_pretrained(
                 name,
-                use_auth_token=HF_TOKEN,
+                token=HF_TOKEN,       # <-- updated here
                 use_fast=False,
                 cache_dir=path
             )
             AutoModelForSpeechSeq2Seq.from_pretrained(
                 name,
-                use_auth_token=HF_TOKEN,
+                token=HF_TOKEN,       # <-- updated here
                 cache_dir=path
             )
     else:
