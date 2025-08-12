@@ -30,7 +30,6 @@ RUN pip install xformers==0.0.23.post1 \
     --extra-index-url https://download.pytorch.org/whl/cu118
 
 ARG HUGGINGFACE_TOKEN
-ENV HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
 
 
 RUN python3 download_models.py
