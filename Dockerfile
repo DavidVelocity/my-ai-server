@@ -5,8 +5,7 @@ RUN apt update && apt install -y python3 python3-pip git libgl1 libglib2.0-0
 
 # Copy your code
 WORKDIR /app
-ARG GITHUB_TOKEN
-RUN git clone --recurse-submodules https://${GITHUB_TOKEN}@github.com/DavidVelocity/my-ai-server.git .
+COPY . /app
 
 # Pin pip for compatibility
 RUN pip3 install "pip<25.3"
