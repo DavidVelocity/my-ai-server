@@ -13,7 +13,7 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
         if is_pipeline:
             DiffusionPipeline.from_pretrained(
                 name,
-                use_auth_token=HF_TOKEN,
+                token=HF_TOKEN,
                 **kwargs
             ).save_pretrained(path)
         else:
@@ -26,9 +26,9 @@ def download_tts_model(name, subfolder):
     path = os.path.join(MODEL_DIR, subfolder)
     if not os.path.exists(path):
         print(f"Downloading TTS model {name} to {path} ...")
-        tokenizer = AutoTokenizer.from_pretrained(name, use_fast=False, use_auth_token=HF_TOKEN)
+        tokenizer = AutoTokenizer.from_pretrained(name, use_fast=False, token=HF_TOKEN)
         tokenizer.save_pretrained(path)
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(name, use_auth_token=HF_TOKEN)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(name, token=HF_TOKEN)
         model.save_pretrained(path)
     else:
         print(f"TTS model {name} already downloaded.")
