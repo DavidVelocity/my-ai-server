@@ -7,6 +7,8 @@ RUN apt update && apt install -y python3 python3-pip git libgl1 libglib2.0-0
 COPY . /app
 WORKDIR /app
 
+RUN git submodule update --init --recursive
+
 # Pin pip for compatibility
 RUN pip3 install "pip<25.3"
 
