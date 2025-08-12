@@ -12,7 +12,7 @@ RUN pip3 install "pip<25.3"
 
 
 # Install torch and torchaudio first (matching CUDA version)
-RUN pip install torch==2.1.2+cu118 torchvision==0.16.2+cu118 torchaudio==2.1.2+cu118 \
+RUN pip install torch==2.6.0+cu118 torchvision==0.20.0+cu118 torchaudio==2.6.0+cu118 \
     --extra-index-url https://download.pytorch.org/whl/cu118
 
 
