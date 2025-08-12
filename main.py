@@ -9,6 +9,7 @@ from diffusers import (
 )
 from diffusers.utils import load_image, export_to_video
 from transformers import pipeline as hf_pipeline
+from datasets import load_dataset
 from PIL import Image
 from io import BytesIO
 import numpy as np
@@ -17,10 +18,7 @@ import uuid
 import os
 import torch
 import asyncio
-
-# Added Coqui XTTS imports
-from TTS.tts.configs.xtts_config import XttsConfig
-from TTS.tts.models.xtts import Xtts
+import soundfile as sf  # Moved import here, used in TTS
 
 API_KEY = os.getenv("API_KEY", "changeme")  # Set securely in your environment
 MODEL_DIR = "./models"
@@ -52,12 +50,14 @@ i2v_pipe = None  # StabilityAI image-to-video pipeline
 t2i_base = None  # StabilityAI text-to-image base pipeline
 t2i_refiner = None  # StabilityAI text-to-image refiner pipeline
 i2i_pipe = None  # StabilityAI image-to-image pipeline
-tts_model = None  # Coqui XTTS text-to-speech pipeline
-tts_config = None  # Coqui XTTS text-to-speech pipeline
+
+# TTS pipeline and speaker embedding
+tts_pipe = None
+speaker_embedding = None
 
 @app.on_event("startup")
 async def load_models():
-    global t2v_pipe, i2v_pipe, t2i_base, t2i_refiner, i2i_pipe, tts_model, tts_config
+    global t2v_pipe, i2v_pipe, t2i_base, t2i_refiner, i2i_pipe, tts_pipe, speaker_embedding
     print("Loading models from local disk...")
 
     # Wan text-to-video
@@ -101,12 +101,12 @@ async def load_models():
     )
     i2i_pipe.to("cuda")
 
-    # Load Coqui XTTS instead of StableAudioPipeline
-    tts_config = XttsConfig()
-    tts_config.load_json(os.path.join(MODEL_DIR, "xtts", "config.json"))
-    tts_model = Xtts.init_from_config(tts_config)
-    tts_model.load_checkpoint(tts_config, checkpoint_dir=os.path.join(MODEL_DIR, "xtts"), eval=True)
-    tts_model.cuda()
+    # Load Microsoft SpeechT5 TTS pipeline
+    tts_pipe = hf_pipeline("text-to-speech", model="microsoft/speecht5_tts")
+
+    # Load speaker embedding dataset and pick example embedding
+    embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
+    speaker_embedding = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
 
     print("✅ All models loaded successfully.")
 
@@ -221,18 +221,17 @@ async def run(
     elif task_type == "text_to_speech":
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
-        # Use Coqui XTTS synthesize method
-        outputs = tts_model.synthesize(
+
+        # Generate speech with microsoft/speecht5_tts pipeline and speaker embedding
+        speech = tts_pipe(
             prompt,
-            tts_config,
-            speaker_wav="/data/TTS-public/_refclips/3.wav",
-            gpt_cond_len=3,
-            language="en",
+            forward_params={"speaker_embeddings": speaker_embedding}
         )
-        import soundfile as sf
+
         filename = f"tts-{uid}.wav"
         path = os.path.join(OUTPUT_DIR, filename)
-        sf.write(path, outputs, samplerate=tts_config.audio.sample_rate)
+        sf.write(path, speech["audio"], samplerate=speech["sampling_rate"])
+
         return {"output": {"audio_url": f"/outputs/{filename}"}}
 
     else:

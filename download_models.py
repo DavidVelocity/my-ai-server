@@ -2,10 +2,9 @@ from diffusers import DiffusionPipeline
 from transformers import AutoTokenizer, AutoModelForSpeechSeq2Seq
 import torch
 import os
-import subprocess
 
 MODEL_DIR = "./models"
-HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")  # Pulls token from environment
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")  # Pull token from environment securely
 
 def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
     path = os.path.join(MODEL_DIR, subfolder if subfolder else name)
@@ -14,40 +13,34 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
         if is_pipeline:
             DiffusionPipeline.from_pretrained(
                 name,
-                token=HF_TOKEN,
+                use_auth_token=HF_TOKEN,
                 **kwargs
             ).save_pretrained(path)
         else:
-            # For text-to-speech: download tokenizer and model explicitly
-            AutoTokenizer.from_pretrained(
-                name,
-                token=HF_TOKEN,
-                use_fast=False,
-                cache_dir=path
-            )
-            AutoModelForSpeechSeq2Seq.from_pretrained(
-                name,
-                token=HF_TOKEN,
-                cache_dir=path
-            )
+            # For non-pipeline models, just download tokenizer and model explicitly
+            download_tts_model(name, subfolder)
     else:
         print(f"Model {name} already downloaded.")
 
-def download_coqui_xtts(repo_url="https://github.com/coqui-ai/xtts.git", subfolder="tts/xtts"):
+def download_tts_model(name, subfolder):
     path = os.path.join(MODEL_DIR, subfolder)
     if not os.path.exists(path):
-        print(f"Cloning Coqui XTTS from {repo_url} to {path} ...")
-        subprocess.run(["git", "clone", repo_url, path], check=True)
+        print(f"Downloading TTS model {name} to {path} ...")
+        tokenizer = AutoTokenizer.from_pretrained(name, use_fast=False, use_auth_token=HF_TOKEN)
+        tokenizer.save_pretrained(path)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(name, use_auth_token=HF_TOKEN)
+        model.save_pretrained(path)
     else:
-        print("Coqui XTTS repo already cloned.")
+        print(f"TTS model {name} already downloaded.")
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+# Image/Video models
 download_model("Wan-AI/Wan2.1-T2V-1.3B-Diffusers", subfolder="t2v", torch_dtype=torch.float16)
 download_model("stabilityai/stable-video-diffusion-img2vid-xt", subfolder="i2v", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-base-1.0", subfolder="t2i/base", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-refiner-1.0", subfolder="t2i/refiner", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-refiner-1.0", subfolder="i2i", torch_dtype=torch.float16)
 
-# Instead, clone Coqui XTTS repo
-download_coqui_xtts()
+# Microsoft SpeechT5 TTS model only
+download_tts_model("microsoft/speecht5_tts", "tts/speecht5")
