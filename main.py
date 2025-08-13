@@ -45,11 +45,11 @@ ASPECT_RATIOS = {
 DURATION_TO_FRAMES = {5: 30, 10: 60, 15: 90, 20: 120}
 
 # Model placeholders
-t2v_pipe = None  # Wan text-to-video pipeline
-i2v_pipe = None  # StabilityAI image-to-video pipeline
-t2i_base = None  # StabilityAI text-to-image base pipeline
-t2i_refiner = None  # StabilityAI text-to-image refiner pipeline
-i2i_pipe = None  # StabilityAI image-to-image pipeline
+t2v_pipe = None
+i2v_pipe = None
+t2i_base = None
+t2i_refiner = None
+i2i_pipe = None
 
 # TTS pipeline and speaker embedding
 tts_pipe = None
@@ -65,8 +65,12 @@ async def load_models():
         os.path.join(MODEL_DIR, "t2v", "vae"), torch_dtype=torch.bfloat16
     )
     t2v_pipe = WanPipeline.from_pretrained(
-        os.path.join(MODEL_DIR, "t2v"), vae=vae, torch_dtype=torch.bfloat16
+        os.path.join(MODEL_DIR, "t2v"),
+        vae=vae,
+        torch_dtype=torch.bfloat16,
+        enable_xformers_memory_efficient_attention=False
     ).to("cuda")
+    t2v_pipe.enable_attention_slicing()
 
     # StabilityAI image-to-video
     i2v_pipe = DiffusionPipeline.from_pretrained(
@@ -74,17 +78,19 @@ async def load_models():
         torch_dtype=torch.float16,
         enable_xformers_memory_efficient_attention=False
     ).to("cuda")
+    i2v_pipe.enable_attention_slicing()
 
-    # StabilityAI text-to-image base and refiner
+    # StabilityAI text-to-image base
     t2i_base = DiffusionPipeline.from_pretrained(
         os.path.join(MODEL_DIR, "t2i", "base"),
         torch_dtype=torch.float16,
         variant="fp16",
         use_safetensors=True,
         enable_xformers_memory_efficient_attention=False
-    )
-    t2i_base.to("cuda")
+    ).to("cuda")
+    t2i_base.enable_attention_slicing()
 
+    # StabilityAI text-to-image refiner
     t2i_refiner = DiffusionPipeline.from_pretrained(
         os.path.join(MODEL_DIR, "t2i", "refiner"),
         text_encoder_2=t2i_base.text_encoder_2,
@@ -93,23 +99,23 @@ async def load_models():
         use_safetensors=True,
         variant="fp16",
         enable_xformers_memory_efficient_attention=False
-    )
-    t2i_refiner.to("cuda")
+    ).to("cuda")
+    t2i_refiner.enable_attention_slicing()
 
-    # StabilityAI image-to-image pipeline
+    # StabilityAI image-to-image
     i2i_pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
         os.path.join(MODEL_DIR, "i2i"),
         torch_dtype=torch.float16,
         variant="fp16",
         use_safetensors=True,
         enable_xformers_memory_efficient_attention=False
-    )
-    i2i_pipe.to("cuda")
+    ).to("cuda")
+    i2i_pipe.enable_attention_slicing()
 
     # Load Microsoft SpeechT5 TTS pipeline
     tts_pipe = hf_pipeline("text-to-speech", model="microsoft/speecht5_tts")
 
-    # Load speaker embedding dataset and pick example embedding
+    # Load speaker embedding dataset
     embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
     speaker_embedding = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
 
@@ -226,17 +232,13 @@ async def run(
     elif task_type == "text_to_speech":
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
-
-        # Generate speech with microsoft/speecht5_tts pipeline and speaker embedding
         speech = tts_pipe(
             prompt,
             forward_params={"speaker_embeddings": speaker_embedding}
         )
-
         filename = f"tts-{uid}.wav"
         path = os.path.join(OUTPUT_DIR, filename)
         sf.write(path, speech["audio"], samplerate=speech["sampling_rate"])
-
         return {"output": {"audio_url": f"/outputs/{filename}"}}
 
     else:
