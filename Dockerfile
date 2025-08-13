@@ -28,8 +28,8 @@ RUN pip install xformers==0.0.27.post2 \
 # Hugging Face token
 ARG HUGGINGFACE_TOKEN
 
-# Download models during build
-RUN python3 download_models.py
+# Copy startup script
+COPY start.sh /app/start.sh
 
-# Start server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Run startup script
+CMD ["./start.sh"]

@@ -17,20 +17,6 @@ env/
 *.env
 *.env.* 
 .envrc
-# Python cache
-__pycache__/
-*.py[cod]
-*.so
-
-# Virtual environments
-venv/
-env/
-*.egg-info/
-*.egg
-
-# Git
-.git/
-.gitignore
 
 # Environment and config files
 *.env
