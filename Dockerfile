@@ -21,11 +21,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 RUN pip3 install --no-cache-dir --upgrade diffusers transformers tokenizers
 
 # Try installing prebuilt xformers first; if it fails, build from source
-RUN pip install xformers==0.0.27.post2 --extra-index-url https://download.pytorch.org/whl/cu121 || \
-    (echo "Prebuilt xformers failed, building from source..." && \
-     pip uninstall -y xformers && \
-     pip install ninja && \
-     pip install --no-build-isolation git+https://github.com/facebookresearch/xformers.git)
+RUN git clone https://github.com/facebookresearch/xformers.git /tmp/xformers
+RUN cd /tmp/xformers && pip install -r requirements.txt && python setup.py build && python setup.py install
 
 # Make sure start.sh is executable
 RUN chmod +x /app/start.sh
