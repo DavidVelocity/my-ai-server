@@ -11,11 +11,19 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
     if not os.path.exists(path):
         print(f"Downloading {name} to {path} ...")
         if is_pipeline:
-            DiffusionPipeline.from_pretrained(
+            pipe = DiffusionPipeline.from_pretrained(
                 name,
                 token=HF_TOKEN,
                 **kwargs
-            ).save_pretrained(path)
+            )
+            # Force SDP attention instead of xformers
+            if hasattr(pipe, "unet") and hasattr(pipe.unet, "set_attn_processor"):
+                try:
+                    pipe.unet.set_attn_processor("sdpa")
+                    print(f"SDP attention enabled for {name}")
+                except Exception as e:
+                    print(f"Warning: Could not enable SDP attention for {name}: {e}")
+            pipe.save_pretrained(path)
         else:
             # For non-pipeline models, just download tokenizer and model explicitly
             download_tts_model(name, subfolder)

@@ -14,15 +14,11 @@ RUN pip3 install "pip<25.3"
 # Install torch + torchvision + torchaudio with matching CUDA
 RUN pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 torchaudio==2.1.2+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install the rest of requirements
+# Install the rest of requirements (xformers should be removed from requirements.txt)
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Upgrade core ML libs (but not torch)
 RUN pip3 install --no-cache-dir --upgrade diffusers transformers tokenizers
-
-# Try installing prebuilt xformers first; if it fails, build from source
-RUN git clone https://github.com/facebookresearch/xformers.git /tmp/xformers
-RUN cd /tmp/xformers && pip install -r requirements.txt && python setup.py build && python setup.py install
 
 # Make sure start.sh is executable
 RUN chmod +x /app/start.sh

@@ -18,7 +18,7 @@ import uuid
 import os
 import torch
 import asyncio
-import soundfile as sf  # Moved import here, used in TTS
+import soundfile as sf 
 
 API_KEY = os.getenv("API_KEY", "changeme")  # Set securely in your environment
 MODEL_DIR = "./models"
@@ -70,7 +70,9 @@ async def load_models():
 
     # StabilityAI image-to-video
     i2v_pipe = DiffusionPipeline.from_pretrained(
-        os.path.join(MODEL_DIR, "i2v"), torch_dtype=torch.float16
+        os.path.join(MODEL_DIR, "i2v"), 
+        torch_dtype=torch.float16,
+        enable_xformers_memory_efficient_attention=False
     ).to("cuda")
 
     # StabilityAI text-to-image base and refiner
@@ -79,6 +81,7 @@ async def load_models():
         torch_dtype=torch.float16,
         variant="fp16",
         use_safetensors=True,
+        enable_xformers_memory_efficient_attention=False
     )
     t2i_base.to("cuda")
 
@@ -89,6 +92,7 @@ async def load_models():
         torch_dtype=torch.float16,
         use_safetensors=True,
         variant="fp16",
+        enable_xformers_memory_efficient_attention=False
     )
     t2i_refiner.to("cuda")
 
@@ -98,6 +102,7 @@ async def load_models():
         torch_dtype=torch.float16,
         variant="fp16",
         use_safetensors=True,
+        enable_xformers_memory_efficient_attention=False
     )
     i2i_pipe.to("cuda")
 
