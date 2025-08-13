@@ -11,7 +11,7 @@ COPY . /app
 RUN pip3 install "pip<25.3"
 
 # Install PyTorch 2.6.0 with CUDA 12.1 first
-RUN pip install torch==2.5.1+cu121 torchvision==0.20.1+cu121 torchaudio==2.5.1+cu121 \
+RUN pip install torch==2.1.2+cu121 torchvision==0.16.2+cu121 torchaudio==2.1.2+cu121 \
     --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining dependencies
