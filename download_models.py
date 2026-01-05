@@ -4,7 +4,7 @@ import torch
 import os
 
 MODEL_DIR = "./models"
-HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")  # Pull token from environment securely
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
 def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
     path = os.path.join(MODEL_DIR, subfolder if subfolder else name)
@@ -16,16 +16,14 @@ def download_model(name, subfolder=None, is_pipeline=True, **kwargs):
                 token=HF_TOKEN,
                 **kwargs
             )
-            # Force SDP attention instead of xformers
-            if hasattr(pipe, "unet") and hasattr(pipe.unet, "set_attn_processor"):
+            if hasattr(pipe, "unet") and hasattr(pipe.unet, "enable_attention_slicing"):
                 try:
-                    pipe.unet.set_attn_processor("sdpa")
-                    print(f"SDP attention enabled for {name}")
+                    pipe.unet.enable_attention_slicing()
+                    print(f"Attention slicing enabled for {name}")
                 except Exception as e:
-                    print(f"Warning: Could not enable SDP attention for {name}: {e}")
+                    print(f"Warning: Could not enable attention slicing for {name}: {e}")
             pipe.save_pretrained(path)
         else:
-            # For non-pipeline models, just download tokenizer and model explicitly
             download_tts_model(name, subfolder)
     else:
         print(f"Model {name} already downloaded.")
@@ -43,12 +41,10 @@ def download_tts_model(name, subfolder):
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Image/Video models
 download_model("Wan-AI/Wan2.1-T2V-1.3B-Diffusers", subfolder="t2v", torch_dtype=torch.float16)
 download_model("stabilityai/stable-video-diffusion-img2vid-xt", subfolder="i2v", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-base-1.0", subfolder="t2i/base", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-refiner-1.0", subfolder="t2i/refiner", torch_dtype=torch.float16)
 download_model("stabilityai/stable-diffusion-xl-refiner-1.0", subfolder="i2i", torch_dtype=torch.float16)
 
-# Microsoft SpeechT5 TTS model only
 download_tts_model("microsoft/speecht5_tts", "tts/speecht5")

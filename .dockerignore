@@ -18,11 +18,6 @@ env/
 *.env.* 
 .envrc
 
-# Environment and config files
-*.env
-*.env.* 
-.envrc
-
 # OS-specific files
 .DS_Store
 Thumbs.db
