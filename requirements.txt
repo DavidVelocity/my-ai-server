@@ -14,7 +14,7 @@ safetensors==0.4.1
 
 Pillow==10.1.0
 imageio==2.33.1
-imageio-ffmpeg==1.4.9
+imageio-ffmpeg==0.6.0
 numpy==1.24.3
 soundfile==0.12.1
 librosa==0.10.0
